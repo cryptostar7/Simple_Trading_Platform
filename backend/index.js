@@ -3,12 +3,13 @@ const mysql = require('mysql2/promise');
 const express = require('express');
 const app = express();
 const wss = new WebSocket.Server({ port: 8080 });
+require('dotenv').config();
 
 // MySQL connection pool with your credentials
 const pool = mysql.createPool({
-    host: 'Your host name',          // Your hostname
-    user: 'Your username',                // Your username
-    password: 'Your DB name', // Your password
+    host: process.env.MY_SQL_HOST,          // Your hostname
+    user: process.env.MY_SQL_USER_NAME,                // Your username
+    password: process.env.MY_SQL_PASSWORD, // Your password
     database: 'trading_db',        // Your database name
     connectionLimit: 10            // Adjust as needed
 });
