@@ -9,8 +9,8 @@
                 try {
                     console.log("Fetching prices....");
                     const priceData = await fetchPrices();
-                    setPrices(priceData);
-                    console.log("Set prices data", JSON.stringify(priceData))
+                    console.log("><<<><><", JSON.stringify(priceData.data));
+                    setPrices(priceData.data);
                 } catch (error) {
                     console.error('WebSocket error:', error);
                 }
@@ -21,7 +21,12 @@
 
         return (
             <div>
-                Prices: 
+                <h2>Prices:</h2> {prices}
+                {/* {prices && Object.entries(prices).map(([crypto, priceObj]) => (
+                    <div key={crypto}>
+                        {crypto.charAt(0).toUpperCase() + crypto.slice(1)}: {priceObj.usd}
+                    </div>
+                ))} */}
             </div>
         );
     }
