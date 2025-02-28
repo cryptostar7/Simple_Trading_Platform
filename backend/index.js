@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const mysql = require('mysql2/promise');
 const express = require('express');
 const app = express();
+const fetchPrices = require('./utils/fetchPrices');
 const wss = new WebSocket.Server({ port: 8080 });
 require('dotenv').config();
 
@@ -10,7 +11,7 @@ const pool = mysql.createPool({
     host: process.env.MY_SQL_HOST,          // Your hostname
     user: process.env.MY_SQL_USER_NAME,                // Your username
     password: process.env.MY_SQL_PASSWORD, // Your password
-    database: 'trading_db',        // Your database name
+    database: 'mydb',        // Your database name
     connectionLimit: 10            // Adjust as needed
 });
 
@@ -38,17 +39,20 @@ const trades = [];
 
 // Simulate price updates every 5 seconds
 const tradingPairs = ['BTC/USD', 'ETH/USD', 'LTC/USD', 'XRP/USD', 'BCH/USD'];
-setInterval(() => {
-    const updates = tradingPairs.map(pair => ({
-        pair,
-        price: (Math.random() * 10000).toFixed(2) // Dummy price generator
-    }));
+setInterval(async () => {
+    const datas = await fetchPrices();
+    
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'price_update', data: updates }));
+            client.send(JSON.stringify({ type: 'price_update', data: datas }))
+            // client.send(JSON.stringify({ type: 'price_update', data: test_var }))
+            console.log("Sent the price data", datas);
+
+        } else {
+            console.log("Clients are not connected");
         }
-    });
-}, 5000);
+    })
+}, 15000)
 
 // WebSocket connection handler
 wss.on('connection', ws => {
@@ -97,7 +101,7 @@ wss.on('connection', ws => {
 
                 // Insert order into database
                 const [result] = await pool.execute(
-                    'INSERT INTO Orders (user_id, pair, type, order_type, amount, price) VALUES (?, ?, ?, ?, ?, ?)',
+                    'INSERT INTO orders (user_id, pair, type, order_type, amount, price) VALUES (?, ?, ?, ?, ?, ?)',
                     [userId, pair, side, orderType, orderAmount, orderPrice]
                 );
                 const orderId = result.insertId;
@@ -108,10 +112,10 @@ wss.on('connection', ws => {
                 if (orderType === 'market') {
                     tradePrice = (Math.random() * 10000).toFixed(2); // Dummy execution price
                     await pool.execute(
-                        'INSERT INTO Trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
+                        'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
                         [orderId, pair, orderAmount, tradePrice]
                     );
-                    await pool.execute('UPDATE Orders SET status = "filled" WHERE id = ?', [orderId]);
+                    await pool.execute('UPDATE orders SET status = "filled" WHERE id = ?', [orderId]);
 
                     trades.push({ pair, amount: orderAmount, price: tradePrice, executed_at: new Date() });
                     wss.clients.forEach(client => {  // Broadcast to all clients
@@ -142,11 +146,11 @@ wss.on('connection', ws => {
                 }
 
                 // Update balance (simplified for demo)
-                const currency = side === 'buy' ? pair.split('/')[1] : pair.split('/')[0];
-                await pool.execute(
-                    'UPDATE Balances SET amount = amount - ? WHERE user_id = ? AND currency = ?',
-                    [side === 'buy' ? orderAmount * (orderPrice || tradePrice || 0) : orderAmount, userId, currency]
-                );
+                // const currency = side === 'buy' ? pair.split('/')[1] : pair.split('/')[0];
+                // await pool.execute(
+                //     'UPDATE Balances SET amount = amount - ? WHERE user_id = ? AND currency = ?',
+                //     [side === 'buy' ? orderAmount * (orderPrice || tradePrice || 0) : orderAmount, userId, currency]
+                // );
             } catch (err) {
                 console.error('Error processing order:', {
                     error: err.message,
@@ -163,4 +167,4 @@ wss.on('connection', ws => {
     ws.send(JSON.stringify({ type: 'trade', data: trades }));
 });
 
-app.listen(3000, () => console.log('Server running on port 3000'));
+app.listen(3001, () => console.log('Server running on port 3001'));
