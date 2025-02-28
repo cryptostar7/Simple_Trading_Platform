@@ -14,7 +14,7 @@ function App() {
   const wsRef = useRef(null); // Reference to store the WebSocket connection
 
   useEffect(() => {
-    // Establish WebSocket connection
+    // Establish WebSocket connection asdf
     wsRef.current = new WebSocket('ws://localhost:8080');
 
     wsRef.current.onmessage = (event) => {
