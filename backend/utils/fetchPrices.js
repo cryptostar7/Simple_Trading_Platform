@@ -1,6 +1,6 @@
 const CoinGecko = require("coingecko-api");
 
-async function fetchPrices() {
+async function fetchPrices(days = 30, id = 'bitcoin') {
     const CRYPTO_IDS = ['bitcoin', 'ethereum', 'litecoin', 'ripple', 'bitcoin-cash'];
     const CoinGeckoClient = new CoinGecko();
 
@@ -28,18 +28,28 @@ async function fetchPrices() {
         // }
 
         // return marketData;
+
+
         
-        const response = await CoinGeckoClient.simple.price({
+        const priceRes = await CoinGeckoClient.simple.price({
             ids: CRYPTO_IDS,
             vs_currencies: 'usd',
+            include_24hr_change: true,
+            include_24hr_vol: true,
         })
 
+        const chartRes = await CoinGeckoClient.coins.fetchMarketChart(id, {
+            vs_currency: 'usd',  
+            days: days, 
+        })
+
+
         const priceData = {
-            timestamp: Date.now(),
-            prices: response.data
+            prices: priceRes.data,
+            chartRes,
         };
 
-        return priceData.prices;
+        return priceData;
     } catch (err) {
         console.error('Error fetching prices:', err);
         return err;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend  } from 'recharts';
 
 function App() {
   const [orderBook, setOrderBook] = useState({
@@ -10,6 +11,13 @@ function App() {
   });
   const [trades, setTrades] = useState([]);
   const [priceUpdates, setPriceUpdates] = useState({});
+  const [chartUpdate, setChartUpdate] = useState({
+    'BTC/USD': [],
+    'ETH/USD': [],
+    'LTC/USD': [],
+    'XRP/USD': [],
+    'BCH/USD': []
+  });
   const [order, setOrder] = useState({ pair: 'BTC/USD', side: 'buy', orderType: 'market', amount: '', price: '' });
   const wsRef = useRef(null); // Reference to store the WebSocket connection
 
@@ -18,19 +26,55 @@ function App() {
 
     wsRef.current.onmessage = (event) => {
       const { type, data } = JSON.parse(event.data);
+      console.log("data from server", data);
       if (type === 'price_update') {
         const priceData = {};
         Object.entries(data).map(([key, value]) => {
           if (key === "bitcoin") {
             priceData["BTC/USD"] = value;
+            setChartUpdate(prev => ({
+              ...prev,
+              'BTC/USD': [...prev['BTC/USD'], {
+                time: new Date().toLocaleTimeString(),
+                price: value["usd"]
+              }].slice(-30) // Keep last 30 data points
+            }));
           } else if (key === "ethereum") {
             priceData["ETH/USD"] = value;
+            setChartUpdate(prev => ({
+              ...prev,
+              'ETH/USD': [...prev['ETH/USD'], {
+                time: new Date().toLocaleTimeString(),
+                price: value["usd"]
+              }].slice(-30) // Keep last 30 data points
+            }));
           } else if (key === "litecoin") {
             priceData["LTC/USD"] = value;
+            setChartUpdate(prev => ({
+              ...prev,
+              'LTC/USD': [...prev['LTC/USD'], {
+                time: new Date().toLocaleTimeString(),
+                price: value["usd"]
+              }].slice(-30) // Keep last 30 data points
+            }));
           } else if (key === "ripple") {
             priceData["XRP/USD"] = value;
+            setChartUpdate(prev => ({
+              ...prev,
+              'XRP/USD': [...prev['XRP/USD'], {
+                time: new Date().toLocaleTimeString(),
+                price: value["usd"]
+              }].slice(-30) // Keep last 30 data points
+            }));
           } else if (key === "bitcoin-cash") {
             priceData["BCH/USD"] = value;
+            setChartUpdate(prev => ({
+              ...prev,
+              'BCH/USD': [...prev['BCH/USD'], {
+                time: new Date().toLocaleTimeString(),
+                price: value["usd"]
+              }].slice(-30) // Keep last 30 data points
+            }));
           }
         })
         setPriceUpdates(priceData);
@@ -141,6 +185,23 @@ function App() {
           ))
         }
       </h2>
+
+      <h2>Price Charts</h2>
+        <LineChart width={800} height={400} data={chartUpdate[order.pair]}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="time" />
+          <YAxis domain={['auto', 'auto']} />
+          <Tooltip />
+          <Legend />
+          <Line 
+            type="monotone" 
+            dataKey="price" 
+            stroke="#8884d8" 
+            dot={false} 
+            name={order.pair}
+          />
+        </LineChart>
+
     </div>
   );
 }

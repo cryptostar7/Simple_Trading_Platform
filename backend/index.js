@@ -36,11 +36,12 @@ const orderBook = {
     'BCH/USD': { bids: [], asks: [] }
 };
 const trades = [];
+const chartDays = 30;
 
 // Simulate price updates every 5 seconds
 const tradingPairs = ['BTC/USD', 'ETH/USD', 'LTC/USD', 'XRP/USD', 'BCH/USD'];
 setInterval(async () => {
-    const datas = await fetchPrices();
+    const datas = await fetchPrices(chartDays);
     
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {

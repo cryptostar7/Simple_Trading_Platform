@@ -36,3 +36,37 @@
     transform: rotate(360deg);
   }
 }
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.chart-container {
+  margin-bottom: 40px;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.price-info {
+  display: flex;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+h1 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 30px;
+}
+
+h2 {
+  color: #444;
+}
+
+h3, h4 {
+  margin: 0;
+  color: #666;
+}
