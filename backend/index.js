@@ -37,11 +37,12 @@ const orderBook = {
 };
 const trades = [];
 const chartDays = 30;
+let selectedChartId = 'bitcoin';
 
 // Simulate price updates every 5 seconds
 const tradingPairs = ['BTC/USD', 'ETH/USD', 'LTC/USD', 'XRP/USD', 'BCH/USD'];
 setInterval(async () => {
-    const datas = await fetchPrices(chartDays);
+    const datas = await fetchPrices(chartDays, selectedChartId);
     
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
@@ -160,6 +161,17 @@ wss.on('connection', ws => {
                 });
                 ws.send(JSON.stringify({ type: 'error', message: err.message || 'An unknown error occurred' }));
             }
+        } else if (type === 'chart_update') {
+            console.log("Pair from Frontend",data.pair);
+            switch (data.pair) { 
+                case 'BTC/USD' : selectedChartId = 'bitcoin'; break;
+                case 'ETH/USD' : selectedChartId = 'ethereum'; break;
+                case 'LTC/USD' : selectedChartId = 'litecoin'; break; 
+                case 'XRP/USD' : selectedChartId = 'ripple'; break;
+                case 'BCH/USD' : selectedChartId = 'bitcoin-cash'; break;
+                default: console.log('No selected');
+            }
+            console.log("Selected Chart Type:", selectedChartId);
         }
     });
 

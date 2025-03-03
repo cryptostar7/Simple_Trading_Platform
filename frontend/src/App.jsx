@@ -11,6 +11,7 @@ function App() {
   });
   const [trades, setTrades] = useState([]);
   const [priceUpdates, setPriceUpdates] = useState({});
+  const [ chartType, setChartType ] = useState();
   const [chartUpdate, setChartUpdate] = useState({
     'BTC/USD': [],
     'ETH/USD': [],
@@ -118,6 +119,25 @@ function App() {
     }
   };
 
+  const handleChartTypeChange = (e) => {
+    const selectedPair = e.target.value;
+    
+    setChartType(selectedPair);
+    
+    // Send WebSocket message for chart update
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+            type: 'chart_update',
+            data: { pair: selectedPair }
+        }));
+
+        console.log("Sent chart update for", selectedPair);
+    } else {
+      console.log("Web Socket Closed");
+    }
+
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <h1>Trading Page</h1>
@@ -178,29 +198,30 @@ function App() {
       )}
       <button onClick={placeOrder}>Submit Order</button>
 
-      <h2>
-        {
-          Object.entries(order).map(([key, value]) => (
-            `${key}: ${value || 'Not set'} | `
-          ))
-        }
-      </h2>
-
       <h2>Price Charts</h2>
-        <LineChart width={800} height={400} data={chartUpdate[order.pair]}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="time" />
-          <YAxis domain={['auto', 'auto']} />
-          <Tooltip />
-          <Legend />
-          <Line 
-            type="monotone" 
-            dataKey="price" 
-            stroke="#8884d8" 
-            dot={false} 
-            name={order.pair}
-          />
-        </LineChart>
+      
+      {/** Select Token Type for Chart */} 
+      <select onChange={handleChartTypeChange} value={chartType}>
+        <option value="BTC/USD">BTC/USD</option>
+        <option value="ETH/USD">ETH/USD</option>
+        <option value="LTC/USD">LTC/USD</option>
+        <option value="XRP/USD">XRP/USD</option>
+        <option value="BCH/USD">BCH/USD</option>
+      </select>
+      <LineChart width={800} height={400} data={chartUpdate[order.pair]}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="time" />
+        <YAxis domain={['auto', 'auto']} />
+        <Tooltip />
+        <Legend />
+        <Line 
+          type="monotone" 
+          dataKey="price" 
+          stroke="#8884d8" 
+          dot={false} 
+          name={order.pair}
+        />
+      </LineChart>
 
     </div>
   );
