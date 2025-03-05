@@ -29,64 +29,17 @@ function App() {
 
       wsRef.current.onmessage = (event) => {
         const { type, data } = JSON.parse(event.data);
-        const priceOnBackend = data.prices;
-        const chartRes = data.chartRes;
         if (type === 'price_update') {
           const priceData = {};
-          Object.entries(priceOnBackend).map(([key, value]) => {
-            if (key === "bitcoin") {
-              priceData["BTC/USD"] = value;
-              setChartUpdate(prev => ({
-                ...prev,
-                'BTC/USD': [...prev['BTC/USD'], {
-                  time: new Date().toLocaleTimeString(),
-                  price: value["usd"]
-                }].slice(-30) // Keep last 30 data points
-              }));
-            } else if (key === "ethereum") {
-              priceData["ETH/USD"] = value;
-              setChartUpdate(prev => ({
-                ...prev,
-                'ETH/USD': [...prev['ETH/USD'], {
-                  time: new Date().toLocaleTimeString(),
-                  price: value["usd"]
-                }].slice(-30) // Keep last 30 data points
-              }));
-            } else if (key === "litecoin") {
-              priceData["LTC/USD"] = value;
-              setChartUpdate(prev => ({
-                ...prev,
-                'LTC/USD': [...prev['LTC/USD'], {
-                  time: new Date().toLocaleTimeString(),
-                  price: value["usd"]
-                }].slice(-30) // Keep last 30 data points
-              }));
-            } else if (key === "ripple") {
-              priceData["XRP/USD"] = value;
-              setChartUpdate(prev => ({
-                ...prev,
-                'XRP/USD': [...prev['XRP/USD'], {
-                  time: new Date().toLocaleTimeString(),
-                  price: value["usd"]
-                }].slice(-30) // Keep last 30 data points
-              }));
-            } else if (key === "bitcoin-cash") {
-              priceData["BCH/USD"] = value;
-              setChartUpdate(prev => ({
-                ...prev,
-                'BCH/USD': [...prev['BCH/USD'], {
-                  time: new Date().toLocaleTimeString(),
-                  price: value["usd"]
-                }].slice(-30) // Keep last 30 data points
-              }));
-            }
-          })
+          Object.entries(data).map(([key, value]) => {
+            priceData[key] = value;
+          });
           setPriceUpdates(priceData);
-          const chartData = chartRes.data.prices.map((price) => ({  
-            date: new Date(price[0]).toLocaleDateString(),  
-            price: price[1],  
-          }));  
-          setCandleData(chartData);
+          // const chartData = chartRes.data.prices.map((price) => ({  
+          //   date: new Date(price[0]).toLocaleDateString(),  
+          //   price: price[1],  
+          // }));  
+          // setCandleData(chartData);
           
         }
         if (type === 'order_book') {
@@ -159,7 +112,7 @@ function App() {
       <h2>Live Prices</h2>
       <ul>
       {priceUpdates ? Object.entries(priceUpdates).map(([crypto, priceObj]) => (
-          <li key={crypto}>{crypto}: ${priceObj.usd}</li>
+          <li key={crypto}>{crypto}: ${priceObj}</li>
         )) : "Loading..."}
       </ul>
 

@@ -35,25 +35,31 @@ const orderBook = {
     'XRP/USD': { bids: [], asks: [] },
     'BCH/USD': { bids: [], asks: [] }
 };
+
+const livePrices = {
+    'BTC/USD' : 0,
+    'ETH/USD' : 0,
+    'LTC/USD' : 0,
+    'XRP/USD' : 0,
+    'BCH/USD' : 0,
+}
 const trades = [];
-const chartDays = 30;
-let selectedChartId = 'bitcoin';
 
 // Simulate price updates every 5 seconds
 const tradingPairs = ['BTC/USD', 'ETH/USD', 'LTC/USD', 'XRP/USD', 'BCH/USD'];
 
 setInterval(async () => {
-    const datas = await fetchPrices(chartDays, selectedChartId);
+    // const datas = await fetchPrices(chartDays, selectedChartId);
     
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'price_update', data: datas }))
-            // client.send(JSON.stringify({ type: 'price_update', data: test_var }))
+            client.send(JSON.stringify({ type: 'price_update', data: livePrices }))
+            console.log("Sent the price data", livePrices);
         } else {
             console.log("Clients are not connected");
         }
     })
-}, 15000)
+}, 5000)
 
 // WebSocket connection handler
 wss.on('connection', ws => {
@@ -111,7 +117,7 @@ wss.on('connection', ws => {
 
                 // Simple order matching (market orders execute immediately)
                 if (orderType === 'market') {
-                    tradePrice = (Math.random() * 10000).toFixed(2); // Dummy execution price
+                    tradePrice = livePrices[pair]; // Dummy execution price
                     await pool.execute(
                         'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
                         [orderId, pair, orderAmount, tradePrice]
@@ -127,7 +133,20 @@ wss.on('connection', ws => {
                 } else if (orderType === 'limit') {
                     // Add to order book (limit orders)
                     if (side === 'buy') {
+                        if(livePrices[pair] < orderPrice) {
+                            livePrices[pair] = orderPrice;
+                            wss.clients.forEach(client => {
+                                if (client.readyState === WebSocket.OPEN) {
+                                    client.send(JSON.stringify({ type: 'price_update', data: livePrices }))
+                                    console.log("Sent the price data", livePrices);
+                                } else {
+                                    console.log("Clients are not connected");
+                                }
+                            })
+                            console.log("Updated live price for buy", livePrices[pair]);
+                        }
                         orderBook[pair].bids.push({ amount: orderAmount, price: orderPrice });
+                        
                         // Sort bids in descending order (highest price first)
                         orderBook[pair].bids.sort((a, b) => b.price - a.price);
                     } else {
