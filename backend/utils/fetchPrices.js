@@ -34,15 +34,12 @@ async function fetchPrices(days = 30, id = 'bitcoin') {
         const priceRes = await CoinGeckoClient.simple.price({
             ids: CRYPTO_IDS,
             vs_currencies: 'usd',
-            include_24hr_change: true,
-            include_24hr_vol: true,
         })
 
         const chartRes = await CoinGeckoClient.coins.fetchMarketChart(id, {
             vs_currency: 'usd',  
-            days: days, 
+            days: 30,
         })
-
 
         const priceData = {
             prices: priceRes.data,

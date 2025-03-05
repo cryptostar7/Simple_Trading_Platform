@@ -41,6 +41,7 @@ let selectedChartId = 'bitcoin';
 
 // Simulate price updates every 5 seconds
 const tradingPairs = ['BTC/USD', 'ETH/USD', 'LTC/USD', 'XRP/USD', 'BCH/USD'];
+
 setInterval(async () => {
     const datas = await fetchPrices(chartDays, selectedChartId);
     
@@ -48,8 +49,6 @@ setInterval(async () => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'price_update', data: datas }))
             // client.send(JSON.stringify({ type: 'price_update', data: test_var }))
-            console.log("Sent the price data", datas);
-
         } else {
             console.log("Clients are not connected");
         }

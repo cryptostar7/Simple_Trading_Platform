@@ -19,88 +19,101 @@ function App() {
     'XRP/USD': [],
     'BCH/USD': []
   });
+  const [candleData, setCandleData] = useState([]);
   const [order, setOrder] = useState({ pair: 'BTC/USD', side: 'buy', orderType: 'market', amount: '', price: '' });
   const wsRef = useRef(null); // Reference to store the WebSocket connection
 
   useEffect(() => {
-    wsRef.current = new WebSocket('ws://localhost:8080');
+    try {
+      wsRef.current = new WebSocket('ws://localhost:8080');
 
-    wsRef.current.onmessage = (event) => {
-      const { type, data } = JSON.parse(event.data);
-      console.log("data from server", data);
-      if (type === 'price_update') {
-        const priceData = {};
-        Object.entries(data).map(([key, value]) => {
-          if (key === "bitcoin") {
-            priceData["BTC/USD"] = value;
-            setChartUpdate(prev => ({
-              ...prev,
-              'BTC/USD': [...prev['BTC/USD'], {
-                time: new Date().toLocaleTimeString(),
-                price: value["usd"]
-              }].slice(-30) // Keep last 30 data points
-            }));
-          } else if (key === "ethereum") {
-            priceData["ETH/USD"] = value;
-            setChartUpdate(prev => ({
-              ...prev,
-              'ETH/USD': [...prev['ETH/USD'], {
-                time: new Date().toLocaleTimeString(),
-                price: value["usd"]
-              }].slice(-30) // Keep last 30 data points
-            }));
-          } else if (key === "litecoin") {
-            priceData["LTC/USD"] = value;
-            setChartUpdate(prev => ({
-              ...prev,
-              'LTC/USD': [...prev['LTC/USD'], {
-                time: new Date().toLocaleTimeString(),
-                price: value["usd"]
-              }].slice(-30) // Keep last 30 data points
-            }));
-          } else if (key === "ripple") {
-            priceData["XRP/USD"] = value;
-            setChartUpdate(prev => ({
-              ...prev,
-              'XRP/USD': [...prev['XRP/USD'], {
-                time: new Date().toLocaleTimeString(),
-                price: value["usd"]
-              }].slice(-30) // Keep last 30 data points
-            }));
-          } else if (key === "bitcoin-cash") {
-            priceData["BCH/USD"] = value;
-            setChartUpdate(prev => ({
-              ...prev,
-              'BCH/USD': [...prev['BCH/USD'], {
-                time: new Date().toLocaleTimeString(),
-                price: value["usd"]
-              }].slice(-30) // Keep last 30 data points
-            }));
-          }
-        })
-        setPriceUpdates(priceData);
-      }
-      if (type === 'order_book') {
-        // Update the specific pair in the order book
-        console.log("Order Book Data", data);
-
-        setOrderBook(prevOrderBook => ({
-          ...prevOrderBook,
-          [data.pair]: { 
-            bids: data.bids ? [...data.bids].sort((a, b) => b.price - a.price) : [], // Sort bids descending
-            asks: data.asks ? [...data.asks].sort((a, b) => a.price - b.price) : []  // Sort asks ascending
-          }
-        }));
-      }
-      if (type === 'trade') {
-        setTrades(data);
-      }
-      if (type === 'error') {
-        const errorMessage = data?.message || 'An unknown error occurred'; // Safely handle undefined data
-        console.error('Error from backend:', errorMessage);
-        alert(`Order submission failed: ${errorMessage}`); // Show error to user
-      }
-    };
+      wsRef.current.onmessage = (event) => {
+        const { type, data } = JSON.parse(event.data);
+        const priceOnBackend = data.prices;
+        const chartRes = data.chartRes;
+        if (type === 'price_update') {
+          const priceData = {};
+          Object.entries(priceOnBackend).map(([key, value]) => {
+            if (key === "bitcoin") {
+              priceData["BTC/USD"] = value;
+              setChartUpdate(prev => ({
+                ...prev,
+                'BTC/USD': [...prev['BTC/USD'], {
+                  time: new Date().toLocaleTimeString(),
+                  price: value["usd"]
+                }].slice(-30) // Keep last 30 data points
+              }));
+            } else if (key === "ethereum") {
+              priceData["ETH/USD"] = value;
+              setChartUpdate(prev => ({
+                ...prev,
+                'ETH/USD': [...prev['ETH/USD'], {
+                  time: new Date().toLocaleTimeString(),
+                  price: value["usd"]
+                }].slice(-30) // Keep last 30 data points
+              }));
+            } else if (key === "litecoin") {
+              priceData["LTC/USD"] = value;
+              setChartUpdate(prev => ({
+                ...prev,
+                'LTC/USD': [...prev['LTC/USD'], {
+                  time: new Date().toLocaleTimeString(),
+                  price: value["usd"]
+                }].slice(-30) // Keep last 30 data points
+              }));
+            } else if (key === "ripple") {
+              priceData["XRP/USD"] = value;
+              setChartUpdate(prev => ({
+                ...prev,
+                'XRP/USD': [...prev['XRP/USD'], {
+                  time: new Date().toLocaleTimeString(),
+                  price: value["usd"]
+                }].slice(-30) // Keep last 30 data points
+              }));
+            } else if (key === "bitcoin-cash") {
+              priceData["BCH/USD"] = value;
+              setChartUpdate(prev => ({
+                ...prev,
+                'BCH/USD': [...prev['BCH/USD'], {
+                  time: new Date().toLocaleTimeString(),
+                  price: value["usd"]
+                }].slice(-30) // Keep last 30 data points
+              }));
+            }
+          })
+          setPriceUpdates(priceData);
+          const chartData = chartRes.data.prices.map((price) => ({  
+            date: new Date(price[0]).toLocaleDateString(),  
+            price: price[1],  
+          }));  
+          setCandleData(chartData);
+          
+        }
+        if (type === 'order_book') {
+          // Update the specific pair in the order book
+          console.log("Order Book Data", data);
+  
+          setOrderBook(prevOrderBook => ({
+            ...prevOrderBook,
+            [data.pair]: { 
+              bids: data.bids ? [...data.bids].sort((a, b) => b.price - a.price) : [], // Sort bids descending
+              asks: data.asks ? [...data.asks].sort((a, b) => a.price - b.price) : []  // Sort asks ascending
+            }
+          }));
+        }
+        if (type === 'trade') {
+          setTrades(data);
+        }
+        if (type === 'error') {
+          const errorMessage = data?.message || 'An unknown error occurred'; // Safely handle undefined data
+          console.error('Error from backend:', errorMessage);
+          alert(`Order submission failed: ${errorMessage}`); // Show error to user
+        }
+      };
+    } catch (err) {
+      console.log(err);
+    }
+    
 
     // wsRef.current.onclose = () => {
     //   console.log('WebSocket disconnected');
@@ -208,19 +221,15 @@ function App() {
         <option value="XRP/USD">XRP/USD</option>
         <option value="BCH/USD">BCH/USD</option>
       </select>
-      <LineChart width={800} height={400} data={chartUpdate[order.pair]}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="time" />
-        <YAxis domain={['auto', 'auto']} />
-        <Tooltip />
-        <Legend />
-        <Line 
-          type="monotone" 
-          dataKey="price" 
-          stroke="#8884d8" 
-          dot={false} 
-          name={order.pair}
-        />
+
+      <h1>{chartType} Price Chart</h1>  
+      <LineChart width={600} height={300} data={candleData}>  
+        <CartesianGrid strokeDasharray="3 3" />  
+        <XAxis dataKey="date" />  
+        <YAxis />  
+        <Tooltip />  
+        <Legend />  
+        <Line type="monotone" dataKey="price" stroke="#8884d8" />  
       </LineChart>
 
     </div>
