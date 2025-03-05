@@ -11,7 +11,7 @@ function App() {
   });
   const [trades, setTrades] = useState([]);
   const [priceUpdates, setPriceUpdates] = useState({});
-  const [ chartType, setChartType ] = useState();
+  const [ chartType, setChartType ] = useState("BTC/USD");
   const [chartUpdate, setChartUpdate] = useState({
     'BTC/USD': [],
     'ETH/USD': [],
@@ -116,31 +116,6 @@ function App() {
         )) : "Loading..."}
       </ul>
 
-      {/* Order Book (BTC/USD) */}
-      <h2>Order Book (BTC/USD)</h2>
-      <div>
-        <h3>Bids</h3>
-        <ul>
-          {orderBook['BTC/USD']?.bids?.map((bid, i) => (
-            <li key={i}>{bid.amount} @ ${bid.price.toFixed(2)}</li>
-          ))}
-        </ul>
-        <h3>Asks</h3>
-        <ul>
-          {orderBook['BTC/USD']?.asks?.map((ask, i) => (
-            <li key={i}>{ask.amount} @ ${ask.price.toFixed(2)}</li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Trade History */}
-      <h2>Trade History</h2>
-      <ul>
-        {trades.map((trade, i) => (
-          <li key={i}>{trade.pair}: {trade.amount} @ ${trade.price} ({new Date(trade.executed_at).toLocaleTimeString()})</li>
-        ))}
-      </ul>
-
       {/* Place Order */}
       <h2>Place Order</h2>
       <select onChange={e => setOrder({ ...order, pair: e.target.value })}>
@@ -174,6 +149,32 @@ function App() {
         <option value="XRP/USD">XRP/USD</option>
         <option value="BCH/USD">BCH/USD</option>
       </select>
+
+      {/* Order Book (BTC/USD) */}
+      <h2>Order Book ({chartType})</h2>
+      <div>
+        <h3>Bids</h3>
+        <ul>
+          {orderBook[chartType]?.bids?.map((bid, i) => (
+            <li key={i}>{bid.amount} @ ${bid.price.toFixed(2)}</li>
+          ))}
+        </ul>
+        <h3>Asks</h3>
+        <ul>
+          {orderBook[chartType]?.asks?.map((ask, i) => (
+            <li key={i}>{ask.amount} @ ${ask.price.toFixed(2)}</li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Trade History */}
+      <h2>Trade History</h2>
+      <ul>
+        {trades.map((trade, i) => (
+          <li key={i}>{trade.pair}: {trade.amount} @ ${trade.price} ({new Date(trade.executed_at).toLocaleTimeString()})</li>
+        ))}
+      </ul>
+
 
       <h1>{chartType} Price Chart</h1>  
       <LineChart width={600} height={300} data={candleData}>  

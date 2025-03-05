@@ -109,22 +109,24 @@ wss.on('connection', ws => {
                 // Insert order into database
                 const [result] = await pool.execute(
                     'INSERT INTO orders (user_id, pair, type, order_type, amount, price) VALUES (?, ?, ?, ?, ?, ?)',
-                    [userId, pair, side, orderType, orderAmount, orderPrice]
+                    [userId, pair, side, orderType, orderAmount, livePrices[pair]]
                 );
                 const orderId = result.insertId;
+                console.log("Order Id:", orderId);
 
                 let tradePrice = null; // Default value for tradePrice
 
                 // Simple order matching (market orders execute immediately)
                 if (orderType === 'market') {
                     tradePrice = livePrices[pair]; // Dummy execution price
-                    await pool.execute(
-                        'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
-                        [orderId, pair, orderAmount, tradePrice]
-                    );
                     await pool.execute('UPDATE orders SET status = "filled" WHERE id = ?', [orderId]);
 
                     trades.push({ pair, amount: orderAmount, price: tradePrice, executed_at: new Date() });
+                    await pool.execute(
+                        'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
+                        [orderId, pair, orderAmount, tradePrice * orderAmount]
+                    );
+
                     wss.clients.forEach(client => {  // Broadcast to all clients
                         if (client.readyState === WebSocket.OPEN) {
                             client.send(JSON.stringify({ type: 'trade', data: trades }));
@@ -133,6 +135,7 @@ wss.on('connection', ws => {
                 } else if (orderType === 'limit') {
                     // Add to order book (limit orders)
                     if (side === 'buy') {
+                        // Live Price Update
                         if(livePrices[pair] < orderPrice) {
                             livePrices[pair] = orderPrice;
                             wss.clients.forEach(client => {
@@ -143,16 +146,121 @@ wss.on('connection', ws => {
                                     console.log("Clients are not connected");
                                 }
                             })
-                            console.log("Updated live price for buy", livePrices[pair]);
                         }
-                        orderBook[pair].bids.push({ amount: orderAmount, price: orderPrice });
-                        
-                        // Sort bids in descending order (highest price first)
-                        orderBook[pair].bids.sort((a, b) => b.price - a.price);
+
+                        // Update the orderbook data
+                        const matchingAskIndex = orderBook[pair].asks.findIndex(ask => ask.price === orderPrice);
+
+                        if (matchingAskIndex !== -1) {
+                            const matchingAsk = orderBook[pair].asks[matchingAskIndex];
+                            if(matchingAsk.amount > orderAmount) {
+                                orderBook[pair].asks[matchingAskIndex].amount -= orderAmount;
+                                trades.push({
+                                    pair, 
+                                    amount: orderAmount, 
+                                    price: orderPrice, 
+                                    executed_at: new Date() 
+                                });
+
+                                await pool.execute(
+                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
+                                    [orderId, pair, orderAmount, orderPrice]
+                                );
+                            } else if (matchingAsk.amount === orderAmount) {
+                                orderBook[pair].asks.splice(matchingAskIndex, 1);
+                                await pool.execute(
+                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
+                                    [orderId, pair, orderAmount, orderPrice]
+                                );
+                            } else {
+                                orderBook[pair].asks.splice(matchingAskIndex, 1);
+                                const remainingAmount = orderAmount - matchingAsk.amount;
+                                trades.push({
+                                    pair,
+                                    amount: matchingAsk.amount,
+                                    price: orderPrice,
+                                    executed_at: new Date()
+                                });
+
+                                await pool.execute(
+                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
+                                    [orderId, pair, matchingAsk.amount, orderPrice]
+                                );
+
+                                orderBook[pair].bids.push({ 
+                                    amount: remainingAmount, 
+                                    price: orderPrice 
+                                });
+                                orderBook[pair].bids.sort((a, b) => b.price - a.price);                                
+                            }
+                        } else {
+                            // No matching ask, add as new bid
+                            orderBook[pair].bids.push({ amount: orderAmount, price: orderPrice });
+                            orderBook[pair].bids.sort((a, b) => b.price - a.price);
+                        }
+
                     } else {
-                        orderBook[pair].asks.push({ amount: orderAmount, price: orderPrice });
-                        // Sort asks in ascending order (lowest price first)
-                        orderBook[pair].asks.sort((a, b) => a.price - b.price);
+                        const matchingBidIndex = orderBook[pair].bids.findIndex(bid => bid.price === orderPrice);
+                        if (matchingBidIndex !== -1) {
+                            const matchingBid = orderBook[pair].bids[matchingBidIndex];
+                            console.log("<<<<<<Check Point 1>>>>>>>>>");
+                            if (matchingBid.amount > orderAmount) {
+                                // Update the bid amount
+                                orderBook[pair].bids[matchingBidIndex].amount -= orderAmount;
+                                
+                                // Create trade record for the full order amount
+                                trades.push({
+                                    pair,
+                                    amount: orderAmount,
+                                    price: orderPrice,
+                                    executed_at: new Date()
+                                });
+                                await pool.execute(
+                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
+                                    [orderId, pair, orderAmount, orderPrice]
+                                );
+                            } else if(matchingBid.amount === orderAmount) {
+                                orderBook[pair].bids.splice(matchingBidIndex, 1);
+                                trades.push({
+                                    pair,
+                                    amount: orderAmount,
+                                    price: orderPrice,
+                                    executed_at: new Date()
+                                });
+                                await pool.execute(
+                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
+                                    [orderId, pair, orderAmount, orderPrice]
+                                );
+                            } else {
+                                orderBook[pair].bids.splice(matchingBidIndex, 1);
+                                
+                                const remainingAmount = orderAmount - matchingBid.amount;
+                                
+                                trades.push({
+                                    pair,
+                                    amount: matchingBid.amount,
+                                    price: orderPrice,
+                                    executed_at: new Date()
+                                });
+
+                                await pool.execute(
+                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
+                                    [orderId, pair, matchingBid.amount, orderPrice]
+                                );
+
+                                orderBook[pair].asks.push({ 
+                                    amount: remainingAmount, 
+                                    price: orderPrice 
+                                });
+                                orderBook[pair].asks.sort((a, b) => a.price - b.price);
+
+                            }
+                        } else {
+                            // No matching bid, add as new ask
+                            orderBook[pair].asks.push({ amount: orderAmount, price: orderPrice });
+                            orderBook[pair].asks.sort((a, b) => a.price - b.price);
+                        }
+
                     }
 
                     console.log('Updated order book for', pair, ':', orderBook[pair]); // Debug log
@@ -161,6 +269,12 @@ wss.on('connection', ws => {
                     wss.clients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
                             client.send(JSON.stringify({ type: 'order_book', data: { pair, bids: orderBook[pair].bids, asks: orderBook[pair].asks } }));
+                        }
+                    });
+
+                    wss.clients.forEach(client => {  // Broadcast to all clients
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({ type: 'trade', data: trades }));
                         }
                     });
                 }
@@ -179,17 +293,6 @@ wss.on('connection', ws => {
                 });
                 ws.send(JSON.stringify({ type: 'error', message: err.message || 'An unknown error occurred' }));
             }
-        } else if (type === 'chart_update') {
-            console.log("Pair from Frontend",data.pair);
-            switch (data.pair) { 
-                case 'BTC/USD' : selectedChartId = 'bitcoin'; break;
-                case 'ETH/USD' : selectedChartId = 'ethereum'; break;
-                case 'LTC/USD' : selectedChartId = 'litecoin'; break; 
-                case 'XRP/USD' : selectedChartId = 'ripple'; break;
-                case 'BCH/USD' : selectedChartId = 'bitcoin-cash'; break;
-                default: console.log('No selected');
-            }
-            console.log("Selected Chart Type:", selectedChartId);
         }
     });
 
