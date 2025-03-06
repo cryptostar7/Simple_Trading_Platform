@@ -30,6 +30,7 @@ function App() {
       wsRef.current.onmessage = (event) => {
         const { type, data } = JSON.parse(event.data);
         if (type === 'price_update') {
+          console.log("Price update received:", data);
           const priceData = {};
           Object.entries(data).map(([key, value]) => {
             priceData[key] = value;
@@ -38,12 +39,10 @@ function App() {
         }
         if (type === 'order_book') {
           // Update the specific pair in the order book
-          console.log("Order Book Data", data);
   
           setOrderBook(data);
         }
         if (type === 'trade') {
-          console.log("Trade Data", data);
           setTrades(data);
         }
         if (type === 'chart_data') {
@@ -52,7 +51,6 @@ function App() {
             date: item.ordered_at,
             price: item.price
           })) ;
-          console.log("Formatted Chart Data", formatData);
 
           setCandleData(formatData);
         }
@@ -77,7 +75,6 @@ function App() {
 
   const placeOrder = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('Sending order:', { type: 'place_order', data: { userId: 1, ...order } }); // Debug log
       wsRef.current.send(JSON.stringify({ type: 'place_order', data: { userId: 1, ...order } }));
     } else {
       console.error('WebSocket not connected');
@@ -86,7 +83,6 @@ function App() {
 
   const handleChartTypeChange = (e) => {
     const selectedPair = e.target.value;
-    console.log("Selected Pair:", selectedPair);
     setChartType(selectedPair);
   };
 

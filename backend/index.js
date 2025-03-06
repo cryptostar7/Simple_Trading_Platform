@@ -81,9 +81,6 @@ async function initialize() {
             });
         });
 
-        await sendChartData();
-        console.log("Initialize Success");
-
     } catch (err) {
         console.log("Initialize Error", err);
     }
@@ -102,15 +99,32 @@ async function sendChartData() {
             ordered_at: data.ordered_at
         })
     })
-    console.log("Chart Data", chartData);
 
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'chart_data', data: chartData }));
-            console.log("Chart Data Sent");
         } else {
             console.log("Clients are not connected");
         }
+    })
+}
+
+async function getLivePrices() {
+    const [maxPrices] = await pool.execute(`
+        SELECT 
+            pair,
+            COALESCE(MAX(price), 0) as max_price
+        FROM orders 
+        WHERE type = 'buy' 
+            AND order_type = 'limit' 
+            AND status != 'filled'
+        GROUP BY pair
+    `);
+
+    console.log("Max Prices", maxPrices);
+
+    maxPrices.map(maxPrice => {
+        livePrices[maxPrice.pair] = maxPrice.max_price;
     })
 }
 
@@ -127,6 +141,9 @@ setInterval(async () => {
 // WebSocket connection handler
 wss.on('connection', ws => {
     console.log('Client connected');
+
+    sendChartData();
+    getLivePrices();
 
     ws.on('message', async message => {
         const { type, data } = JSON.parse(message);
@@ -207,24 +224,11 @@ wss.on('connection', ws => {
                     console.log("Order Id:", orderId);
                     // Add to order book (limit orders)
                     if (side === 'buy') {
-                        // Live Price Update
-                        if(livePrices[pair] < orderPrice) {
-                            livePrices[pair] = orderPrice;
-                            wss.clients.forEach(client => {
-                                if (client.readyState === WebSocket.OPEN) {
-                                    client.send(JSON.stringify({ type: 'price_update', data: livePrices }))
-                                    console.log("Sent the price data", livePrices);
-                                } else {
-                                    console.log("Clients are not connected");
-                                }
-                            })
-                        }
-
                         // Update the orderbook data
-                        const matchingAskIndex = orderBook[pair].asks.findIndex(ask => ask.price === orderPrice);
-
+                        const matchingAskIndex = orderBook[pair].asks.findIndex(ask => parseFloat(ask.price).toFixed(2) === parseFloat(orderPrice).toFixed(2));
                         if (matchingAskIndex !== -1) {
                             const matchingAsk = orderBook[pair].asks[matchingAskIndex];
+
                             if(matchingAsk.amount > orderAmount) {
                                 orderBook[pair].asks[matchingAskIndex].amount -= orderAmount;
                                 trades.push({
@@ -238,7 +242,8 @@ wss.on('connection', ws => {
                                     'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
                                     [orderId, pair, orderAmount, orderPrice, new Date()]
                                 );
-                            } else if (matchingAsk.amount === orderAmount) {
+                            } else if (matchingAsk.amount == orderAmount) {
+                                console.log("<<<<< Check Point 1 >>>>");
                                 orderBook[pair].asks.splice(matchingAskIndex, 1);
                                 trades.push({
                                     pair,
@@ -280,10 +285,9 @@ wss.on('connection', ws => {
                         }
 
                     } else {
-                        const matchingBidIndex = orderBook[pair].bids.findIndex(bid => bid.price === orderPrice);
+                        const matchingBidIndex = orderBook[pair].bids.findIndex(bid => parseFloat(bid.price).toFixed(2) === parseFloat(orderPrice).toFixed(2));
                         if (matchingBidIndex !== -1) {
                             const matchingBid = orderBook[pair].bids[matchingBidIndex];
-                            console.log("<<<<<<Check Point 1>>>>>>>>>");
                             if (matchingBid.amount > orderAmount) {
                                 // Update the bid amount
                                 orderBook[pair].bids[matchingBidIndex].amount -= orderAmount;
@@ -299,7 +303,9 @@ wss.on('connection', ws => {
                                     'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
                                     [orderId, pair, orderAmount, orderPrice, new Date()]
                                 );
-                            } else if(matchingBid.amount === orderAmount) {
+                            } else if(matchingBid.amount == orderAmount) {
+                                console.log("<<<<< Check Point 2 >>>>");
+
                                 orderBook[pair].bids.splice(matchingBidIndex, 1);
                                 trades.push({
                                     pair,
@@ -345,8 +351,6 @@ wss.on('connection', ws => {
 
                     }
 
-                    console.log('Updated order book for', pair, ':', orderBook[pair]); // Debug log
-
                     wss.clients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
                             client.send(JSON.stringify({ type: 'order_book', data: orderBook }));
@@ -358,6 +362,7 @@ wss.on('connection', ws => {
                             client.send(JSON.stringify({ type: 'trade', data: trades }));
                         }
                     });
+                    getLivePrices();
                     sendChartData();
                 }
 

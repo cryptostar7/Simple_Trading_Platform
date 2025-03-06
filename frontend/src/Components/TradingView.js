@@ -7,6 +7,7 @@ export const TradingViewChart = ({ data }) => {
     useEffect(() => {
       // Group data into 1-minute candles
       const groupedData = data.reduce((acc, item) => {
+
         // Get timestamp rounded to the nearest minute
         const timestamp = Math.floor(Date.parse(item.date) / (60 * 1000)) * 60;
         
@@ -30,9 +31,10 @@ export const TradingViewChart = ({ data }) => {
       const candleData = Object.values(groupedData)
         .map(candle => ({
           ...candle,
-          time: candle.time / 1000 // Convert to seconds for TradingView
+          time: candle.time // Convert to seconds for TradingView
         }))
         .sort((a, b) => a.time - b.time);
+    
   
       const chart = createChart(chartContainerRef.current, {
         width: 1000,
@@ -46,28 +48,22 @@ export const TradingViewChart = ({ data }) => {
           secondsVisible: true,
           tickMarkFormatter: (time) => {
             const date = new Date(time * 1000);
+
             return date.toLocaleString('en-US', {
               month: '2-digit',
               day: '2-digit',
               hour: '2-digit',
-              minute: '2-digit'
+              minute: '2-digit',
+              timeZone: 'UTC'
             });
           }
         }
       });
-  
-    //   const candleSeries = chart.addCandlestickSeries({
-    //     upColor: '#26a69a',
-    //     downColor: '#ef5350',
-    //     borderVisible: false,
-    //     wickUpColor: '#26a69a',
-    //     wickDownColor: '#ef5350'
-    //   });
 
-    const candleSeries = chart.addSeries(CandlestickSeries);
-  
+      const candleSeries = chart.addSeries(CandlestickSeries);
+    
       candleSeries.setData(candleData);
-      
+        
       return () => chart.remove();
     }, [data]);
   
