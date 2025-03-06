@@ -11,7 +11,7 @@ function App() {
   });
   const [trades, setTrades] = useState([]);
   const [priceUpdates, setPriceUpdates] = useState({});
-  const [ chartType, setChartType ] = useState("BTC/USD");
+  const [chartType, setChartType ] = useState("BTC/USD");
   const [chartUpdate, setChartUpdate] = useState({
     'BTC/USD': [],
     'ETH/USD': [],
@@ -26,7 +26,6 @@ function App() {
   useEffect(() => {
     try {
       wsRef.current = new WebSocket('ws://localhost:8080');
-
       wsRef.current.onmessage = (event) => {
         const { type, data } = JSON.parse(event.data);
         if (type === 'price_update') {
@@ -34,47 +33,46 @@ function App() {
           Object.entries(data).map(([key, value]) => {
             priceData[key] = value;
           });
-          setPriceUpdates(priceData);
-          // const chartData = chartRes.data.prices.map((price) => ({  
-          //   date: new Date(price[0]).toLocaleDateString(),  
-          //   price: price[1],  
-          // }));  
-          // setCandleData(chartData);
-          
+          setPriceUpdates(priceData);          
         }
         if (type === 'order_book') {
           // Update the specific pair in the order book
           console.log("Order Book Data", data);
   
-          setOrderBook(prevOrderBook => ({
-            ...prevOrderBook,
-            [data.pair]: { 
-              bids: data.bids ? [...data.bids].sort((a, b) => b.price - a.price) : [], // Sort bids descending
-              asks: data.asks ? [...data.asks].sort((a, b) => a.price - b.price) : []  // Sort asks ascending
-            }
-          }));
+          setOrderBook(data);
         }
         if (type === 'trade') {
+          console.log("Trade Data", data);
           setTrades(data);
         }
+        if (type === 'chart_data') {
+          const filter_res = data.filter(item => item.pair === chartType);
+          const formatData = filter_res.map(item => ({
+            date: item.ordered_at,
+            price: item.price
+          })) ;
+          console.log("Formatted Chart Data", formatData);
+
+          setCandleData(formatData);
+        }
+
         if (type === 'error') {
           const errorMessage = data?.message || 'An unknown error occurred'; // Safely handle undefined data
           console.error('Error from backend:', errorMessage);
           alert(`Order submission failed: ${errorMessage}`); // Show error to user
         }
       };
+
+      return () => {
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+      }
+
     } catch (err) {
       console.log(err);
     }
-    
-
-    // wsRef.current.onclose = () => {
-    //   console.log('WebSocket disconnected');
-    // };
-
-    // Clean up on unmount
-    // return () => wsRef.current.close();
-  }, []);
+  }, [chartType]);
 
   const placeOrder = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -87,25 +85,12 @@ function App() {
 
   const handleChartTypeChange = (e) => {
     const selectedPair = e.target.value;
-    
+    console.log("Selected Pair:", selectedPair);
     setChartType(selectedPair);
-    
-    // Send WebSocket message for chart update
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-            type: 'chart_update',
-            data: { pair: selectedPair }
-        }));
-
-        console.log("Sent chart update for", selectedPair);
-    } else {
-      console.log("Web Socket Closed");
-    }
-
   };
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div style={{ padding: '20px'}}>
       <h1>Trading Page</h1>
 
       {/* Live Prices */}
@@ -156,13 +141,13 @@ function App() {
         <h3>Bids</h3>
         <ul>
           {orderBook[chartType]?.bids?.map((bid, i) => (
-            <li key={i}>{bid.amount} @ ${bid.price.toFixed(2)}</li>
+            <li key={i}>{parseFloat(bid.amount).toFixed(2)} @ ${parseFloat(bid.price).toFixed(2)}</li>
           ))}
         </ul>
         <h3>Asks</h3>
         <ul>
           {orderBook[chartType]?.asks?.map((ask, i) => (
-            <li key={i}>{ask.amount} @ ${ask.price.toFixed(2)}</li>
+            <li key={i}>{parseFloat(ask.amount).toFixed(2)} @ ${parseFloat(ask.price).toFixed(2)}</li>
           ))}
         </ul>
       </div>
@@ -171,16 +156,21 @@ function App() {
       <h2>Trade History</h2>
       <ul>
         {trades.map((trade, i) => (
-          <li key={i}>{trade.pair}: {trade.amount} @ ${trade.price} ({new Date(trade.executed_at).toLocaleTimeString()})</li>
+          <li key={i}>{trade.pair}: {parseFloat(trade.amount).toFixed(2)} @ ${parseFloat(trade.price).toFixed(2)} ({new Date(trade.executed_at).toLocaleTimeString()})</li>
         ))}
       </ul>
 
 
-      <h1>{chartType} Price Chart</h1>  
-      <LineChart width={600} height={300} data={candleData}>  
+      <h1>{chartType} Price Chart</h1>
+      <LineChart width={1000} height={600} data={candleData}>  
         <CartesianGrid strokeDasharray="3 3" />  
         <XAxis dataKey="date" />  
-        <YAxis />  
+        <YAxis 
+          domain={[
+            0,
+            dataMax => Math.ceil(Math.max(...candleData.map(item => item.price)) * 1.2) // Extends 20% above max value
+          ]}
+        /> 
         <Tooltip />  
         <Legend />  
         <Line type="monotone" dataKey="price" stroke="#8884d8" />  

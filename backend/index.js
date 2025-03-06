@@ -48,13 +48,62 @@ const trades = [];
 // Simulate price updates every 5 seconds
 const tradingPairs = ['BTC/USD', 'ETH/USD', 'LTC/USD', 'XRP/USD', 'BCH/USD'];
 
+async function initialize() {
+    try {
+        const [orders] = await pool.execute(
+            'SELECT pair, type, order_type, amount, price, status FROM orders WHERE status != "filled"'
+        );
+
+        orders.forEach(order => {
+            if (order.type === 'buy') {
+                orderBook[order.pair].bids.push({
+                    amount: order.amount,
+                    price: order.price
+                });
+            } else {
+                orderBook[order.pair].asks.push({
+                    amount: order.amount,
+                    price: order.price
+                });
+            }
+        });
+
+        const [dbTrades] = await pool.execute(
+            'SELECT pair, amount, price, executed_at FROM trades'
+        );
+
+        dbTrades.forEach(trade => {
+            trades.push({
+                pair: trade.pair,
+                amount: trade.amount,
+                price: trade.price,
+                executed_at: trade.executed_at
+            });
+        });
+    } catch (err) {
+        console.log("Initialize Error", err);
+    }
+}
+initialize();
+
 setInterval(async () => {
-    // const datas = await fetchPrices(chartDays, selectedChartId);
+
+    const [charts] = await pool.execute(
+        'SELECT pair, price, ordered_at FROM orders'
+    );
+    const chartData = [];
+    charts.forEach(data => {
+        chartData.push({
+            pair: data.pair,
+            price: data.price,
+            ordered_at: data.ordered_at
+        })
+    })
     
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'price_update', data: livePrices }))
-            console.log("Sent the price data", livePrices);
+            client.send(JSON.stringify({ type: 'chart_data', data: chartData }));
         } else {
             console.log("Clients are not connected");
         }
@@ -106,26 +155,28 @@ wss.on('connection', ws => {
                     throw new Error(`Invalid order type: ${orderType}`);
                 }
 
-                // Insert order into database
-                const [result] = await pool.execute(
-                    'INSERT INTO orders (user_id, pair, type, order_type, amount, price) VALUES (?, ?, ?, ?, ?, ?)',
-                    [userId, pair, side, orderType, orderAmount, livePrices[pair]]
-                );
-                const orderId = result.insertId;
-                console.log("Order Id:", orderId);
+                
 
                 let tradePrice = null; // Default value for tradePrice
 
                 // Simple order matching (market orders execute immediately)
                 if (orderType === 'market') {
+                    // Insert order into database
+                    const [result] = await pool.execute(
+                        'INSERT INTO orders (user_id, pair, type, order_type, amount, price, ordered_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [userId, pair, side, orderType, orderAmount, livePrices[pair], new Date()]
+                    );
+                    const orderId = result.insertId;
+                    console.log("Order Id:", orderId);
                     tradePrice = livePrices[pair]; // Dummy execution price
                     await pool.execute('UPDATE orders SET status = "filled" WHERE id = ?', [orderId]);
-
+                    const total_price = tradePrice * orderAmount;
                     trades.push({ pair, amount: orderAmount, price: tradePrice, executed_at: new Date() });
                     await pool.execute(
-                        'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
-                        [orderId, pair, orderAmount, tradePrice * orderAmount]
+                        'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
+                        [orderId, pair, orderAmount, total_price, new Date()]
                     );
+                    
 
                     wss.clients.forEach(client => {  // Broadcast to all clients
                         if (client.readyState === WebSocket.OPEN) {
@@ -133,6 +184,13 @@ wss.on('connection', ws => {
                         }
                     });
                 } else if (orderType === 'limit') {
+                    // Insert order into database
+                    const [result] = await pool.execute(
+                        'INSERT INTO orders (user_id, pair, type, order_type, amount, price, ordered_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [userId, pair, side, orderType, orderAmount, orderPrice, new Date()]
+                    );
+                    const orderId = result.insertId;
+                    console.log("Order Id:", orderId);
                     // Add to order book (limit orders)
                     if (side === 'buy') {
                         // Live Price Update
@@ -163,15 +221,23 @@ wss.on('connection', ws => {
                                 });
 
                                 await pool.execute(
-                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
-                                    [orderId, pair, orderAmount, orderPrice]
+                                    'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
+                                    [orderId, pair, orderAmount, orderPrice, new Date()]
                                 );
                             } else if (matchingAsk.amount === orderAmount) {
                                 orderBook[pair].asks.splice(matchingAskIndex, 1);
+                                trades.push({
+                                    pair,
+                                    amount: orderAmount,
+                                    price: orderPrice,
+                                    executed_at: new Date()
+                                });
                                 await pool.execute(
-                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
-                                    [orderId, pair, orderAmount, orderPrice]
+                                    'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
+                                    [orderId, pair, orderAmount, orderPrice,new Date()]
                                 );
+                                await pool.execute('UPDATE orders SET status = "filled" WHERE id = ?', [orderId]);
+                                
                             } else {
                                 orderBook[pair].asks.splice(matchingAskIndex, 1);
                                 const remainingAmount = orderAmount - matchingAsk.amount;
@@ -183,8 +249,8 @@ wss.on('connection', ws => {
                                 });
 
                                 await pool.execute(
-                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
-                                    [orderId, pair, matchingAsk.amount, orderPrice]
+                                    'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
+                                    [orderId, pair, matchingAsk.amount, orderPrice, new Date()]
                                 );
 
                                 orderBook[pair].bids.push({ 
@@ -216,8 +282,8 @@ wss.on('connection', ws => {
                                     executed_at: new Date()
                                 });
                                 await pool.execute(
-                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
-                                    [orderId, pair, orderAmount, orderPrice]
+                                    'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
+                                    [orderId, pair, orderAmount, orderPrice, new Date()]
                                 );
                             } else if(matchingBid.amount === orderAmount) {
                                 orderBook[pair].bids.splice(matchingBidIndex, 1);
@@ -228,9 +294,11 @@ wss.on('connection', ws => {
                                     executed_at: new Date()
                                 });
                                 await pool.execute(
-                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
-                                    [orderId, pair, orderAmount, orderPrice]
+                                    'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
+                                    [orderId, pair, orderAmount, orderPrice, new Date()]
                                 );
+                                await pool.execute('UPDATE orders SET status = "filled" WHERE id = ?', [orderId]);
+
                             } else {
                                 orderBook[pair].bids.splice(matchingBidIndex, 1);
                                 
@@ -244,8 +312,8 @@ wss.on('connection', ws => {
                                 });
 
                                 await pool.execute(
-                                    'INSERT INTO trades (order_id, pair, amount, price) VALUES (?, ?, ?, ?)',
-                                    [orderId, pair, matchingBid.amount, orderPrice]
+                                    'INSERT INTO trades (order_id, pair, amount, price, executed_at) VALUES (?, ?, ?, ?, ?)',
+                                    [orderId, pair, matchingBid.amount, orderPrice, new Date()]
                                 );
 
                                 orderBook[pair].asks.push({ 
@@ -265,10 +333,9 @@ wss.on('connection', ws => {
 
                     console.log('Updated order book for', pair, ':', orderBook[pair]); // Debug log
 
-                    // Broadcast updated order book to all clients with the pair
                     wss.clients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
-                            client.send(JSON.stringify({ type: 'order_book', data: { pair, bids: orderBook[pair].bids, asks: orderBook[pair].asks } }));
+                            client.send(JSON.stringify({ type: 'order_book', data: orderBook }));
                         }
                     });
 
@@ -297,8 +364,8 @@ wss.on('connection', ws => {
     });
 
     // Send initial order book and trades
-    ws.send(JSON.stringify({ type: 'order_book', data: orderBook }));
     ws.send(JSON.stringify({ type: 'trade', data: trades }));
+    ws.send(JSON.stringify({ type: 'order_book', data: orderBook }));
 });
 
 app.listen(3001, () => console.log('Server running on port 3001'));
