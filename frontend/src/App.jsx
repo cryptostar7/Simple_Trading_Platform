@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend  } from 'recharts';
+import { TradingViewChart } from './Components/TradingView';
 
 function App() {
   const [orderBook, setOrderBook] = useState({
@@ -161,7 +162,7 @@ function App() {
       </ul>
 
 
-      <h1>{chartType} Price Chart</h1>
+      {/* <h1>{chartType} Price Chart</h1>
       <LineChart width={1000} height={600} data={candleData}>  
         <CartesianGrid strokeDasharray="3 3" />  
         <XAxis dataKey="date" />  
@@ -174,7 +175,10 @@ function App() {
         <Tooltip />  
         <Legend />  
         <Line type="monotone" dataKey="price" stroke="#8884d8" />  
-      </LineChart>
+      </LineChart> */}
+
+
+      <TradingViewChart data={candleData} />
 
     </div>
   );

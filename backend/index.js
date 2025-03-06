@@ -80,14 +80,17 @@ async function initialize() {
                 executed_at: trade.executed_at
             });
         });
+
+        await sendChartData();
+        console.log("Initialize Success");
+
     } catch (err) {
         console.log("Initialize Error", err);
     }
 }
 initialize();
 
-setInterval(async () => {
-
+async function sendChartData() {
     const [charts] = await pool.execute(
         'SELECT pair, price, ordered_at FROM orders'
     );
@@ -99,11 +102,22 @@ setInterval(async () => {
             ordered_at: data.ordered_at
         })
     })
-    
+    console.log("Chart Data", chartData);
+
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'chart_data', data: chartData }));
+            console.log("Chart Data Sent");
+        } else {
+            console.log("Clients are not connected");
+        }
+    })
+}
+
+setInterval(async () => {
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'price_update', data: livePrices }))
-            client.send(JSON.stringify({ type: 'chart_data', data: chartData }));
         } else {
             console.log("Clients are not connected");
         }
@@ -155,8 +169,6 @@ wss.on('connection', ws => {
                     throw new Error(`Invalid order type: ${orderType}`);
                 }
 
-                
-
                 let tradePrice = null; // Default value for tradePrice
 
                 // Simple order matching (market orders execute immediately)
@@ -183,6 +195,8 @@ wss.on('connection', ws => {
                             client.send(JSON.stringify({ type: 'trade', data: trades }));
                         }
                     });
+                    sendChartData();
+
                 } else if (orderType === 'limit') {
                     // Insert order into database
                     const [result] = await pool.execute(
@@ -344,6 +358,7 @@ wss.on('connection', ws => {
                             client.send(JSON.stringify({ type: 'trade', data: trades }));
                         }
                     });
+                    sendChartData();
                 }
 
                 // Update balance (simplified for demo)
@@ -360,6 +375,11 @@ wss.on('connection', ws => {
                 });
                 ws.send(JSON.stringify({ type: 'error', message: err.message || 'An unknown error occurred' }));
             }
+        } else if (data.type === 'chartType_update') {
+            const { pair, interval } = data;
+            // Implement chart data retrieval logic here
+        } else {
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid message type' }));
         }
     });
 
